@@ -352,23 +352,25 @@ impl Anthropic {
     fn convert_messages_to_anthropic<'a>(messages: &'a [ChatMessage]) -> Vec<AnthropicMessage<'a>> {
         messages
             .iter()
-            .map(|m| AnthropicMessage {
-                role: match m.role {
-                    ChatRole::User => "user",
-                    ChatRole::Assistant => "assistant",
-                },
-                content: match &m.message_type {
-                    MessageType::Text => vec![MessageContent {
-                        message_type: Some("text"),
-                        text: Some(&m.content),
-                        image_url: None,
-                        source: None,
-                        tool_use_id: None,
-                        tool_input: None,
-                        tool_name: None,
-                        tool_result_id: None,
-                        tool_output: None,
-                    }],
+            .filter_map(|m| {
+                let content = match &m.message_type {
+                    MessageType::Text => {
+                        // Skip empty text messages - Anthropic API rejects empty text content blocks
+                        if m.content.trim().is_empty() {
+                            return None;
+                        }
+                        vec![MessageContent {
+                            message_type: Some("text"),
+                            text: Some(&m.content),
+                            image_url: None,
+                            source: None,
+                            tool_use_id: None,
+                            tool_input: None,
+                            tool_name: None,
+                            tool_result_id: None,
+                            tool_output: None,
+                        }]
+                    }
                     MessageType::Pdf(raw_bytes) => {
                         vec![MessageContent {
                             message_type: Some("document"),
@@ -446,7 +448,19 @@ impl Anthropic {
                             tool_output: Some(r.function.arguments.clone()),
                         })
                         .collect(),
-                },
+                };
+
+                Some(AnthropicMessage {
+                    role: match m.role {
+                        ChatRole::User => "user",
+                        ChatRole::Assistant => match &m.message_type {
+                            // In Anthropic API spec, tool results must be sent as USER messages instead of ASSISTANT
+                            MessageType::ToolResult(_) => "user",
+                            _ => "assistant",
+                        },
+                    },
+                    content,
+                })
             })
             .collect()
     }
