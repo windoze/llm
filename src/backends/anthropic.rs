@@ -726,7 +726,7 @@ impl ChatProvider for Anthropic {
             thinking,
         };
 
-        let url = format!("{}/messages", self.config.base_url);
+        let url = format!("{}/messages", self.config.base_url.trim_end_matches('/'));
         let mut request = self
             .client
             .post(&url)
